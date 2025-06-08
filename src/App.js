@@ -121,7 +121,6 @@ function App() {
   const [holdShape, setHoldShape] = useState(null);
   const [canHold, setCanHold] = useState(true);
   const [lines, setLines] = useState(0);
-  const [mode, setMode] = useState('play');
   const [timer, setTimer] = useState(0); // ตัวจับเวลา (วินาที)
   const [ranking, setRanking] = useState(() => {
     // โหลด ranking จาก localStorage (ถ้ามี)
@@ -179,12 +178,6 @@ function App() {
     animationId = requestAnimationFrame(moveLoop);
     return () => cancelAnimationFrame(animationId);
   }, [board, shape, pos, gameOver]);
-
-  // เพิ่มการนับ piece ทุกครั้งที่ spawn
-  // ฟังก์ชันช่วยสำหรับ spawn position (ถ้ามี)
-  function getSpawnPos(shape) {
-    return { x: 3, y: 0 };
-  }
 
   // เพิ่มใน gravity (tick)
   useEffect(() => {
@@ -300,7 +293,7 @@ function App() {
 
   // บันทึก ranking เมื่อจบเกม 40Line
   useEffect(() => {
-    if (mode === "40line" && lines >= 40 && !gameOver) {
+    if (lines >= 40 && !gameOver) {
       setGameOver(true);
     }
     if (lines >= 40 && !gameOver) {
@@ -315,7 +308,7 @@ function App() {
       localStorage.setItem("tetris40_ranking", JSON.stringify(newRanking));
     }
   // eslint-disable-next-line
-  }, [lines, mode, gameOver]);
+  }, [lines, gameOver]);
 
   // --- UI ---
   function renderBoard() {
