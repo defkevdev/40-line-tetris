@@ -121,7 +121,7 @@ function App() {
   const [holdShape, setHoldShape] = useState(null);
   const [canHold, setCanHold] = useState(true);
   const [lines, setLines] = useState(0);
-  const [mode, setMode] = useState("40line");
+  const [mode, setMode] = useState('play');
   const [timer, setTimer] = useState(0); // ตัวจับเวลา (วินาที)
   const [ranking, setRanking] = useState(() => {
     // โหลด ranking จาก localStorage (ถ้ามี)
