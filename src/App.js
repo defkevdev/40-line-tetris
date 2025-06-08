@@ -144,8 +144,6 @@ function App() {
   const [score, setScore] = useState(0);
   const [lastGain, setLastGain] = useState(0); // state สำหรับแสดง popup คะแนนล่าสุด
   const [showResult, setShowResult] = useState(false);
-  const [combo, setCombo] = useState(0);
-  const [b2b, setB2b] = useState(false);
 
   const requestRef = useRef();
   const moveRef = useRef({ left: false, right: false, down: false });
@@ -230,15 +228,13 @@ function App() {
         // --- เพิ่มคะแนนถ้าเป็นโหมด blitz ---
         if (mode === "blitz") {
           // combo: ถ้าเคลียร์แถว combo+1, ถ้าไม่เคลียร์รีเซ็ต
-          let newCombo = combo;
+          let newCombo = 0;
           if (linesCleared > 0) newCombo += 1;
-          else newCombo = 0;
 
           // b2b: ถ้า tetris ติดกัน
-          let newB2b = b2b;
+          let newB2b = false;
           if (linesCleared === 4) {
-            if (b2b) newB2b = true;
-            else newB2b = true;
+            newB2b = true;
           } else if (linesCleared > 0) {
             newB2b = false;
           }
@@ -256,12 +252,8 @@ function App() {
 
           setScore(s => s + gain);
           setLastGain(gain);
-          setCombo(newCombo);
-          setB2b(newB2b);
         } else {
           setScore(0);
-          setCombo(0);
-          setB2b(false);
           setLastGain(0);
         }
       }
@@ -293,11 +285,10 @@ function App() {
         })();
 
         if (mode === "blitz") {
-          let newCombo = combo;
+          let newCombo = 0;
           if (linesCleared > 0) newCombo += 1;
-          else newCombo = 0;
 
-          let newB2b = b2b;
+          let newB2b = false;
           if (linesCleared === 4) {
             newB2b = true;
           } else if (linesCleared > 0) {
@@ -316,12 +307,8 @@ function App() {
 
           setScore(s => s + gain);
           setLastGain(gain);
-          setCombo(newCombo);
-          setB2b(newB2b);
         } else {
           setScore(0);
-          setCombo(0);
-          setB2b(false);
           setLastGain(0);
         }
 
@@ -898,8 +885,6 @@ function App() {
               setLines(0);
               setTimer(0);
               setScore(0);      // <-- เพิ่มบรรทัดนี้
-              setCombo(0);      // (ถ้าต้องการ reset combo/b2b ด้วย)
-              setB2b(false);
               setLastGain(0);
             }}
             style={{
