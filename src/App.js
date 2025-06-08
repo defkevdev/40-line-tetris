@@ -112,6 +112,12 @@ function formatTime(sec) {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+// --- รายชื่อโดเนท (เรียงจากมากไปน้อย) ---
+const DONATORS = [
+  { name: "voidwid", amount: 30 },
+  { name: "slowroller", amount: 20 }
+];
+
 function App() {
   const [board, setBoard] = useState(emptyBoard());
   const [shape, setShape] = useState(randomShape());
@@ -127,8 +133,19 @@ function App() {
     const saved = localStorage.getItem("tetris40_ranking");
     return saved ? JSON.parse(saved) : [];
   });
+  const [blitzRanking, setBlitzRanking] = useState(() => {
+    const saved = localStorage.getItem("tetris_blitz_ranking");
+    return saved ? JSON.parse(saved) : [];
+  });
   const [pieceCount, setPieceCount] = useState(0);
   const [startTime, setStartTime] = useState(Date.now());
+  const [screen, setScreen] = useState("menu");
+  const [mode, setMode] = useState("40line"); // หรือ "blitz"
+  const [score, setScore] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [b2b, setB2b] = useState(false);
+  const [lastGain, setLastGain] = useState(0); // state สำหรับแสดง popup คะแนนล่าสุด
+  const [showResult, setShowResult] = useState(false);
 
   const requestRef = useRef();
   const moveRef = useRef({ left: false, right: false, down: false });
@@ -189,6 +206,7 @@ function App() {
       } else {
         const newBoard = merge(board, shape, pos);
         const cleared = clearLines(newBoard);
+        // ...เพิ่ม logic ข้างบนตรงนี้...
         if (pos.y === 0) {
           setGameOver(true);
         } else {
@@ -198,6 +216,53 @@ function App() {
           setPos({ x: 3, y: 0 });
           setCanHold(true);
           setPieceCount(c => c + 1); // เพิ่มตรงนี้
+        }
+
+        // นับจำนวนแถวที่เคลียร์
+        const linesCleared = (() => {
+          let count = 0;
+          for (let y = 0; y < ROWS; y++) {
+            if (newBoard[y].every(cell => cell !== 0)) count++;
+          }
+          return count;
+        })();
+
+        // --- เพิ่มคะแนนถ้าเป็นโหมด blitz ---
+        if (mode === "blitz") {
+          // combo: ถ้าเคลียร์แถว combo+1, ถ้าไม่เคลียร์รีเซ็ต
+          let newCombo = combo;
+          if (linesCleared > 0) newCombo += 1;
+          else newCombo = 0;
+
+          // b2b: ถ้า tetris ติดกัน
+          let newB2b = b2b;
+          if (linesCleared === 4) {
+            if (b2b) newB2b = true;
+            else newB2b = true;
+          } else if (linesCleared > 0) {
+            newB2b = false;
+          }
+
+          // คำนวณคะแนน
+          const gain = getBlitzScore({
+            linesCleared,
+            combo: newCombo > 0 ? newCombo - 1 : 0,
+            isB2B: newB2b,
+            softDropCells: 0, // ถ้าคุณมี logic soft/hard drop ให้ใส่ค่าจริง
+            hardDropCells: 0,
+            speedSec: 0, // ถ้ามี logic จับเวลาแต่ละชิ้น
+            garbageLinesCleared: 0
+          });
+
+          setScore(s => s + gain);
+          setLastGain(gain);
+          setCombo(newCombo);
+          setB2b(newB2b);
+        } else {
+          setScore(0);
+          setCombo(0);
+          setB2b(false);
+          setLastGain(0);
         }
       }
       requestRef.current = setTimeout(tick, 500);
@@ -217,6 +282,50 @@ function App() {
         }
         const newBoard = merge(board, shape, dropPos);
         const cleared = clearLines(newBoard);
+
+        // --- Logic คะแนน blitz (เหมือนเดิม) ---
+        const linesCleared = (() => {
+          let count = 0;
+          for (let y = 0; y < ROWS; y++) {
+            if (newBoard[y].every(cell => cell !== 0)) count++;
+          }
+          return count;
+        })();
+
+        if (mode === "blitz") {
+          let newCombo = combo;
+          if (linesCleared > 0) newCombo += 1;
+          else newCombo = 0;
+
+          let newB2b = b2b;
+          if (linesCleared === 4) {
+            newB2b = true;
+          } else if (linesCleared > 0) {
+            newB2b = false;
+          }
+
+          const gain = getBlitzScore({
+            linesCleared,
+            combo: newCombo > 0 ? newCombo - 1 : 0,
+            isB2B: newB2b,
+            softDropCells: 0,
+            hardDropCells: dropPos.y - pos.y,
+            speedSec: 0,
+            garbageLinesCleared: 0
+          });
+
+          setScore(s => s + gain);
+          setLastGain(gain);
+          setCombo(newCombo);
+          setB2b(newB2b);
+        } else {
+          setScore(0);
+          setCombo(0);
+          setB2b(false);
+          setLastGain(0);
+        }
+
+        // --- เพิ่มส่วนนี้เพื่อ "ลงบล็อก" จริง ---
         if (dropPos.y === 0) {
           setGameOver(true);
         } else {
@@ -225,7 +334,7 @@ function App() {
           setNextShape(randomShape());
           setPos({ x: 3, y: 0 });
           setCanHold(true);
-          setPieceCount(c => c + 1); // เพิ่มตรงนี้
+          setPieceCount(c => c + 1);
         }
       }
       if (e.key === "ArrowLeft") moveRef.current.left = true;
@@ -286,10 +395,21 @@ function App() {
 
   // Timer (นับจาก 1 ไปเรื่อยๆจนจบเกม)
   useEffect(() => {
-    if (gameOver || lines >= 40) return;
-    const interval = setInterval(() => setTimer(t => t + 1), 1000);
-    return () => clearInterval(interval);
-  }, [gameOver, lines]);
+    if (gameOver) return;
+    if (mode === "blitz") {
+      if (timer >= 60) {
+        setGameOver(true);
+        setShowResult(true);
+        return;
+      }
+      const interval = setInterval(() => setTimer(t => t + 1), 1000);
+      return () => clearInterval(interval);
+    } else {
+      if (lines >= 40) return;
+      const interval = setInterval(() => setTimer(t => t + 1), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [gameOver, lines, timer, mode]);
 
   // บันทึก ranking เมื่อจบเกม 40Line
   useEffect(() => {
@@ -310,11 +430,26 @@ function App() {
   // eslint-disable-next-line
   }, [lines, gameOver]);
 
+  // บันทึก ranking เมื่อจบเกม Blitz
+  useEffect(() => {
+    if (mode === "blitz" && gameOver && showResult) {
+      const newRanking = [
+        ...blitzRanking,
+        { score, pps, date: new Date().toLocaleString() }
+      ]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+      setBlitzRanking(newRanking);
+      localStorage.setItem("tetris_blitz_ranking", JSON.stringify(newRanking));
+    }
+    // eslint-disable-next-line
+  }, [mode, gameOver, showResult]);
+
   // --- UI ---
   function renderBoard() {
     const display = board.map(row => [...row]);
-    // วาด ghost (ตำแหน่งเงา)
     const ghostPos = getGhostPosition(board, shape, pos);
+    // วาด ghost (ตำแหน่งเงา)
     for (let y = 0; y < shape.shape.length; y++) {
       for (let x = 0; x < shape.shape[y].length; x++) {
         if (
@@ -337,26 +472,48 @@ function App() {
     }
     return (
       <div style={{ position: "relative" }}>
-        {/* เลขจำนวน Line ที่เหลือ */}
-        <div
-          style={{
-            position: "absolute",
-            top: 8,
-            left: 0,
-            width: "100%",
-            textAlign: "center",
-            fontSize: 32,
-            fontWeight: "bold",
-            color: "#0ffb", // ฟ้าโปร่งใส
-            textShadow: "0 2px 8px #000, 0 0 8px #0ff8",
-            letterSpacing: 2,
-            zIndex: 2,
-            userSelect: "none",
-            pointerEvents: "none"
-          }}
-        >
-          {Math.max(0, 40 - lines)}
-        </div>
+        {/* ตรงนี้! */}
+        {mode === "40line" ? (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 0,
+              width: "100%",
+              textAlign: "center",
+              fontSize: 32,
+              fontWeight: "bold",
+              color: "#0ffb",
+              textShadow: "0 2px 8px #000, 0 0 8px #0ff8",
+              letterSpacing: 2,
+              zIndex: 2,
+              userSelect: "none",
+              pointerEvents: "none"
+            }}
+          >
+            {Math.max(0, 40 - lines)}
+          </div>
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 0,
+              width: "100%",
+              textAlign: "center",
+              fontSize: 32,
+              fontWeight: "bold",
+              color: "#ff0",
+              textShadow: "0 2px 8px #000, 0 0 8px #ff08",
+              letterSpacing: 2,
+              zIndex: 2,
+              userSelect: "none",
+              pointerEvents: "none"
+            }}
+          >
+            {score}
+          </div>
+        )}
         {/* กระดานเกม */}
         {display.map((row, y) => (
           <div key={y} style={{ display: "flex" }}>
@@ -464,6 +621,36 @@ function App() {
 
   // --- RANKING UI ---
   function renderRanking() {
+    if (mode === "blitz") {
+      return (
+        <div style={{
+          minWidth: 220,
+          background: "#181b20",
+          borderRadius: 8,
+          padding: 12,
+          marginLeft: 16,
+          color: "#fff"
+        }}>
+          <div style={{ fontWeight: "bold", marginBottom: 8, textAlign: "center" }}>Blitz Ranking (Top 10)</div>
+          <div style={{ fontSize: 15, marginBottom: 4 }}>Score | Piece/s | Date</div>
+          {blitzRanking.length === 0 && <div style={{ color: "#aaa" }}>No record</div>}
+          {blitzRanking.map((r, i) => (
+            <div key={i} style={{
+              background: i === 0 ? "#0f08" : "none",
+              padding: "2px 0",
+              borderRadius: 4
+            }}>
+              {i + 1}. <b style={{ color: "#ff0" }}>{r.score}</b>
+              <span style={{ color: "#0ff", fontWeight: "bold", marginLeft: 6, marginRight: 6 }}>
+                {r.pps}
+              </span>
+              <span style={{ color: "#aaa", fontSize: 12 }}>({r.date})</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    // 40line ranking เดิม
     return (
       <div style={{
         minWidth: 180,
@@ -493,102 +680,321 @@ function App() {
     );
   }
 
-  // --- MAIN RENDER ---
-  return (
-    <div
-      className="App"
-      style={{
+  // --- UI รายชื่อโดเนท ---
+  function renderDonators() {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 64, // ขยับลงมาห่างปุ่ม
+          left: 32,
+          width: 300,
+          minHeight: 120,
+          background: "#23272fcc",
+          borderRadius: 16,
+          color: "#fff",
+          fontSize: 20,
+          padding: "20px 24px",
+          zIndex: 100,
+          boxShadow: "0 4px 24px #000a",
+          textAlign: "left"
+        }}
+      >
+        <div style={{ fontWeight: "bold", fontSize: 24, marginBottom: 12, color: "#ff0" }}>
+          ขอบคุณผู้สนับสนุน
+        </div>
+        <ol style={{ margin: 0, paddingLeft: 24, fontSize: 18 }}>
+          {DONATORS.map((d, i) => (
+            <li key={i} style={{ marginBottom: 6 }}>
+              <span style={{ color: "#0ff" }}>{d.name}</span>
+              <span style={{ color: "#fff" }}> {d.amount} THB</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
+  function renderMenu() {
+    return (
+      <div style={{
         minHeight: "100vh",
-        background: "#23272f",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center"
-      }}
-    >
-      <h1 style={{ color: "#fff", marginBottom: 8 }}>Tetris 40 Line</h1>
-      <div style={{ color: "#fff", marginBottom: 8, fontSize: 18 }}>
-        Lines: {lines} / 40
+        justifyContent: "center",
+        background: "#23272f"
+      }}>
+        <h1 style={{ color: "#fff", marginBottom: 32 }}>Tetris by 404SkillNotFound</h1>
+        <button
+          style={menuBtnStyle}
+          onClick={() => { setMode("40line"); setScreen("game"); }}
+        >โหมด 40 Line</button>
+        <button
+          style={menuBtnStyle}
+          onClick={() => { setMode("blitz"); setScreen("game"); }}
+        >โหมด Blitz (1 นาที)</button>
       </div>
-      <div style={{ color: "#fff", marginBottom: 8, fontSize: 18 }}>
-        Time: {formatTime(timer)}
-      </div>
-      <div style={{ display: "flex", gap: 32 }}>
-        {/* --- Player UI (left) --- */}
-        <div>
-          {renderHoldShape()}
+    );
+  }
+  const menuBtnStyle = {
+    padding: "16px 48px",
+    fontSize: 22,
+    margin: "12px 0",
+    borderRadius: 8,
+    border: "none",
+    background: "#09f",
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: "bold"
+  };
+
+  function getTetrioScore(lines, combo, b2b) {
+    // linesCleared: จำนวนแถวที่เคลียร์ใน 1 ครั้ง
+    // combo: คอมโบปัจจุบัน (0 = ไม่มี)
+    // b2b: true/false (Back-to-Back Tetris)
+    let base = 0;
+    if (lines === 1) base = 100;
+    if (lines === 2) base = 300;
+    if (lines === 3) base = 500;
+    if (lines === 4) base = 800;
+    if (b2b && lines === 4) base += 400; // B2B Tetris bonus
+    if (combo > 0) base += combo * 50; // combo bonus
+    return base;
+  }
+
+  function getBlitzScore({
+    linesCleared,
+    combo,
+    isB2B,
+    softDropCells,
+    hardDropCells,
+    speedSec,
+    garbageLinesCleared
+  }) {
+    let score = 0;
+
+    // 1. Basic line clear
+    if (linesCleared === 1) score += 100;
+    if (linesCleared === 2) score += 300;
+    if (linesCleared === 3) score += 500;
+    if (linesCleared === 4) score += 800;
+
+    // 2. Combo
+    if (combo > 0) score += combo * 50;
+
+    // 3. Back-to-Back Tetris
+    if (isB2B && linesCleared === 4) score += 400;
+
+    // 4. Drop bonuses
+    if (softDropCells) score += softDropCells * 1;
+    if (hardDropCells) score += hardDropCells * 2;
+
+    // 5. Speed bonus
+    if (typeof speedSec === "number") {
+      if (speedSec <= 0.5) score += 20;
+      else if (speedSec <= 1.0) score += 10;
+    }
+
+    // 6. Garbage line clear
+    if (garbageLinesCleared) score += garbageLinesCleared * 50;
+
+    return score;
+  }
+
+  // --- MAIN RENDER ---
+  return (
+    <>
+      {screen === "menu" ? (
+        renderMenu()
+      ) : (
+        <div
+          className="App"
+          style={{
+            minHeight: "100vh",
+            background: "#23272f",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          {/* ปุ่ม กลับเมนู */}
+          <button
+            style={{
+              position: "fixed",
+              top: 16, // ขยับขึ้นไปชิดขอบ
+              left: 16,
+              zIndex: 1001, // ให้สูงกว่ากล่องโดเนท
+              background: "#444",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 24px",
+              fontSize: 16,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px #0006"
+            }}
+            onClick={() => setScreen("menu")}
+          >
+            กลับเมนู
+          </button>
+
+          {renderDonators()}
+          <h1 style={{ color: "#fff", marginBottom: 8 }}>
+            {mode === "40line" ? "Tetris 40 Line" : "Tetris Blitz"}
+          </h1>
+          {mode === "40line" ? (
+            <div style={{ color: "#fff", marginBottom: 8, fontSize: 18 }}>
+              Lines: {lines} / 40
+            </div>
+          ) : (
+            <div style={{ color: "#fff", marginBottom: 8, fontSize: 18 }}>
+              Score: {score}
+            </div>
+          )}
+          <div style={{ color: "#fff", marginBottom: 8, fontSize: 18 }}>
+            {mode === "blitz"
+              ? `Time: 00:${(60 - timer).toString().padStart(2, "0")}`
+              : `Time: ${formatTime(timer)}`}
+          </div>
+          <div style={{ display: "flex", gap: 32 }}>
+            {/* --- Player UI (left) --- */}
+            <div>
+              {renderHoldShape()}
+              <div style={{
+                background: "#181b20",
+                borderRadius: 8,
+                padding: 10,
+                marginTop: 8,
+                color: "#fff",
+                fontSize: 16,
+                textAlign: "center"
+              }}>
+                <div>Piece/s: <b>{pps}</b></div>
+              </div>
+            </div>
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                {gameOver
+                  ? lines >= 40
+                    ? <h2 style={{ color: "#0f0" }}>Finished!</h2>
+                    : <h2 style={{ color: "#fff" }}>Game Over</h2>
+                  : renderBoard()}
+              </div>
+            </div>
+            {renderNextShape()}
+            {renderRanking()}
+          </div>
+          <button
+            onClick={() => {
+              setBoard(emptyBoard());
+              setShape(randomShape());
+              setNextShape(randomShape());
+              setHoldShape(null);
+              setPos({ x: 3, y: 0 });
+              setGameOver(false);
+              setCanHold(true);
+              setLines(0);
+              setTimer(0);
+              setScore(0);      // <-- เพิ่มบรรทัดนี้
+              setCombo(0);      // (ถ้าต้องการ reset combo/b2b ด้วย)
+              setB2b(false);
+              setLastGain(0);
+            }}
+            style={{
+              padding: "8px 24px",
+              fontSize: "1rem",
+              borderRadius: 4,
+              border: "none",
+              background: "#09f",
+              color: "#fff",
+              cursor: "pointer",
+              marginTop: 16
+            }}
+          >
+            Restart
+          </button>
+          <div style={{ color: "#fff", marginTop: 8, fontSize: 14 }}>
+          <div>Move: ← → ↓ | Rotate: ↑ | Hard Drop: Space | Hold: Shift</div>
+        </div>
+        {/* ปุ่ม Support ที่ขวาล่าง */}
+        <SupportButton />
+        {/* เครดิต */}
+        <div
+          style={{
+            position: "fixed",
+            bottom: 8,
+            right: 12,
+            color: "#aaa",
+            fontSize: 13,
+            pointerEvents: "none",
+            userSelect: "none",
+            zIndex: 1
+          }}
+        >
+          made by 404:SkillNotFound (kev)
+        </div>
+        {/* ปุ่ม Bug Report/Feedback */}
+        <BugReportButton />
+        {/* แสดงคะแนนล่าสุดที่ได้จากการเคลียร์แถว */}
+        {lastGain > 0 && (
           <div style={{
-            background: "#181b20",
-            borderRadius: 8,
-            padding: 10,
-            marginTop: 8,
-            color: "#fff",
-            fontSize: 16,
-            textAlign: "center"
+            position: "absolute",
+            top: 0, left: "50%", transform: "translateX(-50%)",
+            color: "#ff0", fontSize: 32, fontWeight: "bold"
           }}>
-            <div>Piece/s: <b>{pps}</b></div>
+            +{lastGain}
           </div>
-        </div>
-        <div>
-          <div style={{ marginBottom: 24 }}>
-            {gameOver
-              ? lines >= 40
-                ? <h2 style={{ color: "#0f0" }}>Finished!</h2>
-                : <h2 style={{ color: "#fff" }}>Game Over</h2>
-              : renderBoard()}
-          </div>
-        </div>
-        {renderNextShape()}
-        {renderRanking()}
+        )}
+        {showResult && mode === "blitz" && (
+  <div style={{
+    position: "fixed",
+    top: 0, left: 0, width: "100vw", height: "100vh",
+    background: "rgba(0,0,0,0.7)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    zIndex: 2000
+  }}>
+    <div style={{
+      background: "#23272f",
+      color: "#fff",
+      borderRadius: 16,
+      padding: "36px 48px",
+      minWidth: 320,
+      textAlign: "center",
+      boxShadow: "0 8px 32px #000a"
+    }}>
+      <h2 style={{ color: "#0ff" }}>Blitz Result</h2>
+      <div style={{ fontSize: 24, margin: "16px 0" }}>
+        Score: <b style={{ color: "#ff0" }}>{score}</b>
+      </div>
+      <div style={{ fontSize: 20, marginBottom: 16 }}>
+        Speed: <b style={{ color: "#0f0" }}>{pps}</b> Piece/s
       </div>
       <button
-        onClick={() => {
-          setBoard(emptyBoard());
-          setShape(randomShape());
-          setNextShape(randomShape());
-          setHoldShape(null);
-          setPos({ x: 3, y: 0 });
-          setGameOver(false);
-          setCanHold(true);
-          setLines(0);
-          setTimer(0);
-        }}
         style={{
-          padding: "8px 24px",
-          fontSize: "1rem",
-          borderRadius: 4,
+          padding: "10px 32px",
+          fontSize: 18,
+          borderRadius: 8,
           border: "none",
           background: "#09f",
           color: "#fff",
           cursor: "pointer",
-          marginTop: 16
+          fontWeight: "bold"
+        }}
+        onClick={() => {
+          setShowResult(false);
+          setScreen("menu");
         }}
       >
-        Restart
+        กลับเมนู
       </button>
-      <div style={{ color: "#fff", marginTop: 8, fontSize: 14 }}>
-      <div>Move: ← → ↓ | Rotate: ↑ | Hard Drop: Space | Hold: Shift</div>
     </div>
-    {/* ปุ่ม Support ที่ขวาล่าง */}
-    <SupportButton />
-    {/* เครดิต */}
-    <div
-      style={{
-        position: "fixed",
-        bottom: 8,
-        right: 12,
-        color: "#aaa",
-        fontSize: 13,
-        pointerEvents: "none",
-        userSelect: "none",
-        zIndex: 1
-      }}
-    >
-      made by 404:SkillNotFound (kev)
-    </div>
-    {/* ปุ่ม Bug Report/Feedback */}
-    <BugReportButton />
-    </div>
+  </div>
+)}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -707,6 +1113,19 @@ function BugReportButton() {
         </div>
       )}
     </>
+  );
+}
+
+function Example() {
+  const [value, setValue] = useState(""); // value คือค่าปัจจุบัน, setValue คือฟังก์ชันเปลี่ยนค่า
+  return (
+    <div>
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+      />
+      <div>ค่าที่กรอก: {value}</div>
+    </div>
   );
 }
 
