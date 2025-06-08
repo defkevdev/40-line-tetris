@@ -142,10 +142,10 @@ function App() {
   const [screen, setScreen] = useState("menu");
   const [mode, setMode] = useState("40line"); // หรือ "blitz"
   const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(0);
-  const [b2b, setB2b] = useState(false);
   const [lastGain, setLastGain] = useState(0); // state สำหรับแสดง popup คะแนนล่าสุด
   const [showResult, setShowResult] = useState(false);
+  const [combo, setCombo] = useState(0);
+  const [b2b, setB2b] = useState(false);
 
   const requestRef = useRef();
   const moveRef = useRef({ left: false, right: false, down: false });
