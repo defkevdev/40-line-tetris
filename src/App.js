@@ -808,11 +808,13 @@ function App() {
         >
           {/* ปุ่ม กลับเมนู */}
           <button
+            tabIndex={-1}
+            onKeyDown={e => e.preventDefault()}
             style={{
               position: "fixed",
-              top: 16, // ขยับขึ้นไปชิดขอบ
+              top: 16,
               left: 16,
-              zIndex: 1001, // ให้สูงกว่ากล่องโดเนท
+              zIndex: 1001,
               background: "#444",
               color: "#fff",
               border: "none",
@@ -874,6 +876,8 @@ function App() {
             {renderRanking()}
           </div>
           <button
+            tabIndex={-1}
+            onKeyDown={e => e.preventDefault()}
             onClick={() => {
               setBoard(emptyBoard());
               setShape(randomShape());
@@ -884,7 +888,7 @@ function App() {
               setCanHold(true);
               setLines(0);
               setTimer(0);
-              setScore(0);      // <-- เพิ่มบรรทัดนี้
+              setScore(0);
               setLastGain(0);
             }}
             style={{
@@ -1101,17 +1105,6 @@ function BugReportButton() {
   );
 }
 
-function Example() {
-  const [value, setValue] = useState(""); // value คือค่าปัจจุบัน, setValue คือฟังก์ชันเปลี่ยนค่า
-  return (
-    <div>
-      <input
-        value={value}
-        onChange={e => setValue(e.target.value)}
-      />
-      <div>ค่าที่กรอก: {value}</div>
-    </div>
-  );
-}
+
 
 export default App;
