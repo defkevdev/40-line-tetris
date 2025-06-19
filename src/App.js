@@ -68,7 +68,8 @@ function emptyBoard() {
 }
 
 function rotate(matrix) {
-  return matrix[0].map((_, i) => matrix.map(row => row[i])).reverse();
+  // หมุนตามเข็มนาฬิกา (clockwise)
+  return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse());
 }
 
 function checkCollision(board, shape, pos) {
@@ -1105,6 +1106,17 @@ function BugReportButton() {
   );
 }
 
-
+function Example() {
+  const [value, setValue] = useState(""); // value คือค่าปัจจุบัน, setValue คือฟังก์ชันเปลี่ยนค่า
+  return (
+    <div>
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+      />
+      <div>ค่าที่กรอก: {value}</div>
+    </div>
+  );
+}
 
 export default App;
